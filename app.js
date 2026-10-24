@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
 
   // ================= Utilidades =================
   const $ = (s, r = document) => r.querySelector(s);
@@ -13,10 +13,23 @@
   const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const sum = (arr, f = (x) => x.amount) => arr.reduce((t, x) => t + (f(x) || 0), 0);
 
-  const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-  const COMPACT = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
-  const money = (c) => BRL.format((c || 0) / 100);
-  const moneyShort = (c) => 'R$ ' + COMPACT.format((c || 0) / 100);
+  // Moedas disponíveis. A formatação dos números segue o padrão brasileiro (1.234,56).
+  const CURRENCIES = [
+    ['EUR', 'Euro', '€'],
+    ['BRL', 'Real', 'R$'],
+    ['USD', 'Dólar americano', 'US$'],
+    ['GBP', 'Libra esterlina', '£'],
+    ['CHF', 'Franco suíço', 'CHF'],
+  ];
+  let FMT, FMT_SHORT;
+  function setCurrency(code) {
+    if (!CURRENCIES.some(([c]) => c === code)) code = 'EUR';
+    FMT = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: code });
+    FMT_SHORT = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: code, notation: 'compact', maximumFractionDigits: 1 });
+  }
+  setCurrency('EUR');
+  const money = (c) => FMT.format((c || 0) / 100);
+  const moneyShort = (c) => FMT_SHORT.format((c || 0) / 100);
   const centsToInput = (c) => (c / 100).toFixed(2).replace('.', ',').replace(/,00$/, '');
   // Lê valores digitados como "1.234,56" ou "1234.56"
   function parseMoney(str) {
@@ -109,7 +122,7 @@
     return {
       v: 1,
       profile: { name: name || '' },
-      settings: { theme: 'auto', accent: ACCENTS[0], lockMinutes: 1 },
+      settings: { theme: 'auto', accent: ACCENTS[0], lockMinutes: 1, currency: 'EUR' },
       loja: {
         funding: funding || 0,
         cats: [
@@ -532,6 +545,7 @@
   function afterUnlock() {
     clearScreen();
     applyLook(S.settings);
+    setCurrency(S.settings.currency);
     ui.month = monthOf(today());
     resetIdle();
     render();
@@ -986,8 +1000,9 @@
         ${r('cats', I.tag, '#00a389', 'Categorias de entradas', String(S.pessoal.catsIn.length)).replace('data-a="cats"', 'data-a="cats" data-list="in"')}
       </div>
 
-      <div class="set-label">Aparência</div>
+      <div class="set-label">Moeda e aparência</div>
       <div class="set-group">
+        ${r('currency', I.cash, '#00a389', 'Moeda', esc(currencyLabel(st.currency)))}
         <div class="set-row"><span class="ico" style="--c:#5e5ce6">${I.moon}</span><span class="lbl">Tema</span>
           ${seg('theme', st.theme, [['auto', 'Auto'], ['light', 'Claro'], ['dark', 'Escuro']])}</div>
         <div class="set-block"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><span class="ico" style="--c:var(--accent);width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--on-accent);background:var(--accent)">${I.palette}</span><span class="lbl" style="font-weight:500">Cor de destaque</span></div>
@@ -1439,6 +1454,27 @@
     });
   }
 
+  function currencyLabel(code) {
+    const c = CURRENCIES.find(([k]) => k === code) || CURRENCIES[0];
+    return `${c[1]} (${c[2]})`;
+  }
+
+  function currencySheet() {
+    const html = `<div class="set-group" style="margin-bottom:12px">${CURRENCIES.map(([code, name, sym]) => `<button class="set-row" data-k="opt" data-v="${code}"><span class="lbl">${name} <span style="color:var(--muted)">· ${sym}</span></span>${S.settings.currency === code ? `<span style="width:20px;color:var(--accent)">${I.check}</span>` : ''}</button>`).join('')}</div>
+      <p class="hint">Muda só o símbolo exibido. Os valores que você já lançou continuam os mesmos.</p>`;
+    openSheet('Moeda', html, (sh, entry) => {
+      sh.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-k=opt]');
+        if (!b) return;
+        S.settings.currency = b.dataset.v;
+        setCurrency(S.settings.currency);
+        closeSheet(entry);
+        commit();
+        toast(`Moeda: ${currencyLabel(S.settings.currency)}`);
+      });
+    });
+  }
+
   function lockTimeSheet() {
     const opts = [[0, 'Imediatamente ao sair do app'], [1, 'Após 1 minuto'], [5, 'Após 5 minutos'], [15, 'Após 15 minutos']];
     const html = `<div class="set-group" style="margin-bottom:12px">${opts.map(([v, l]) => `<button class="set-row" data-k="opt" data-v="${v}"><span class="lbl">${l}</span>${S.settings.lockMinutes === v ? `<span style="width:20px;color:var(--accent)">${I.check}</span>` : ''}</button>`).join('')}</div>
@@ -1525,6 +1561,7 @@
     if (!ok) return;
     S = st;
     applyLook(S.settings);
+    setCurrency(S.settings.currency);
     commit();
     await flushSave();
     toast('Backup restaurado ✅');
@@ -1582,6 +1619,7 @@
     theme: (el) => { S.settings.theme = el.dataset.v; applyLook(S.settings); commit(); },
     accent: (el) => { S.settings.accent = el.dataset.v; applyLook(S.settings); commit(); },
     'lock-time': () => lockTimeSheet(),
+    currency: () => currencySheet(),
     'change-pin': () => changePinSheet(),
     lock: () => lock(),
     export: () => exportBackup(),

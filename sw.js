@@ -1,6 +1,6 @@
 // Service worker: guarda os arquivos do app no aparelho para funcionar sem internet.
 // Ele só armazena o código do app. Os seus dados ficam no IndexedDB, criptografados.
-const CACHE = 'cofre-v1.0.0';
+const CACHE = 'cofre-v1.1.0';
 const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'db.js', 'calc.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
